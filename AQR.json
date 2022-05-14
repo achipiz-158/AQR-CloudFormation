@@ -19,7 +19,7 @@
             "ConstraintDescription": "Debe ser el nombre de una llave existente"
         },
         "DBName": {
-            "Default": "bdtutela",
+            "Default": "DB_MySQL",
             "Description": "Nombre de base de datos",
             "Type": "String",
             "MinLength": "1",
