@@ -1,0 +1,487 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "PROPUESTA DE UNA ARQUITECTURA EN CAPAS EN LA NUBE BASADA EN SOFTWARE LIBRE, UN ESTUDIO DE CASO",
+    "Parameters": {
+        "VpcId": {
+            "Type": "AWS::EC2::VPC::Id",
+            "Description": "ID de VPC",
+            "Default": "vpc-43b3123b",
+            "ConstraintDescription": "Debe ser ID de VPC existente"
+        },
+        "Subnets": {
+            "Type": "List<AWS::EC2::Subnet::Id>",
+            "Description": "Lista subredes de la (VPC)",
+            "ConstraintDescription": "Debe ser listar al menos dos subredes existentes"
+        },
+        "KeyName": {
+            "Description": "Nombre de llave para acceso por SSH a las instancias",
+            "Type": "AWS::EC2::KeyPair::KeyName",
+            "ConstraintDescription": "Debe ser el nombre de una llave existente"
+        },
+        "DBName": {
+            "Default": "bdtutela",
+            "Description": "Nombre de base de datos",
+            "Type": "String",
+            "MinLength": "1",
+            "MaxLength": "64",
+            "AllowedPattern": "[a-zA-Z][a-zA-Z0-9]*",
+            "ConstraintDescription": "Debe comenzar con una letra y contener solo caracteres alfanuméricos."
+        },
+        "DBUser": {
+            "NoEcho": "true",
+            "Description": "Nombre de usuario para acceso a la DB",
+            "Type": "String",
+            "MinLength": "1",
+            "MaxLength": "16",
+            "AllowedPattern": "[a-zA-Z][a-zA-Z0-9]*",
+            "ConstraintDescription": "Debe comenzar con una letra y contener solo caracteres alfanuméricos."
+        },
+        "DBPassword": {
+            "NoEcho": "true",
+            "Description": "Contraseña para acceso a la DB",
+            "Type": "String",
+            "MinLength": "8",
+            "MaxLength": "41",
+            "AllowedPattern": "[a-zA-Z0-9]*",
+            "ConstraintDescription": "Debe contener solo caracteres alfanuméricos."
+        },
+        "DBAllocatedStorage": {
+            "Default": "5",
+            "Description": "Tamaño en (Gb) de la DB",
+            "Type": "Number",
+            "MinValue": "5",
+            "MaxValue": "1024",
+            "ConstraintDescription": "Debe estar entre 5 y 1024Gb."
+        },
+        "DBInstanceClass": {
+            "Description": "Tipo de instancia de la DB",
+            "Type": "String",
+            "Default": "db.t2.micro",
+            "AllowedValues": [
+                "db.t2.micro"
+            ],
+            "ConstraintDescription": "Debe seleccionar un tipo de instancia de base de datos válido."
+        },
+        "WebServerCapacity": {
+            "Default": "2",
+            "Description": "Número inicial de instancias",
+            "Type": "Number",
+            "MinValue": "2",
+            "MaxValue": "2",
+            "ConstraintDescription": "Debe haber entre 1 y 5 instancias EC2."
+        },
+        "InstanceType": {
+            "Description": "Tipo de instancia",
+            "Type": "String",
+            "Default": "t2.micro",
+            "AllowedValues": [
+                "t2.micro"
+            ],
+            "ConstraintDescription": "Debe ser un tipo de instancia EC2 válido"
+        },
+        "InstanceAmiId": {
+            "Description": "Idetificador de la AMI EC2",
+            "Type": "AWS::EC2::Image::Id",
+            "Default": "ami-0ee8244746ec5d6d4",
+            "ConstraintDescription": "Debe ser el ID de AMI de una AMI existente en su cuenta"
+        }
+    },
+    "Resources": {
+        "ALBSecurityGroup": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "GroupDescription": "Habilitar acceso http",
+                "VpcId": {
+                    "Ref": "VpcId"
+                },
+                "SecurityGroupIngress": [
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 80,
+                        "ToPort": 80,
+                        "CidrIp": "0.0.0.0/0"
+                    }
+                ]
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "791d14e9-f69f-44f4-9c25-93a84968b709"
+                }
+            }
+        },
+        "ApplicationLoadBalancer": {
+            "Type": "AWS::ElasticLoadBalancingV2::LoadBalancer",
+            "Properties": {
+                "Subnets": {
+                    "Ref": "Subnets"
+                },
+                "SecurityGroups": [
+                    {
+                        "Ref": "ALBSecurityGroup"
+                    }
+                ]
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "d42147cd-8715-4fa4-b139-f95714aa679f"
+                }
+            }
+        },
+        "ALBListener": {
+            "Type": "AWS::ElasticLoadBalancingV2::Listener",
+            "Properties": {
+                "DefaultActions": [
+                    {
+                        "Type": "forward",
+                        "TargetGroupArn": {
+                            "Ref": "ALBTargetGroup"
+                        }
+                    }
+                ],
+                "LoadBalancerArn": {
+                    "Ref": "ApplicationLoadBalancer"
+                },
+                "Port": 80,
+                "Protocol": "HTTP"
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "d48a81a7-bead-4beb-9d02-9ee3d859583c"
+                }
+            }
+        },
+        "ALBTargetGroup": {
+            "Type": "AWS::ElasticLoadBalancingV2::TargetGroup",
+            "Properties": {
+                "HealthCheckIntervalSeconds": 300,
+                "HealthCheckTimeoutSeconds": 120,
+                "HealthyThresholdCount": 2,
+                "Port": 80,
+                "Protocol": "HTTP",
+                "UnhealthyThresholdCount": 2,
+                "VpcId": {
+                    "Ref": "VpcId"
+                },
+                "TargetGroupAttributes": [
+                    {
+                        "Key": "stickiness.enabled",
+                        "Value": "true"
+                    },
+                    {
+                        "Key": "stickiness.type",
+                        "Value": "lb_cookie"
+                    },
+                    {
+                        "Key": "stickiness.lb_cookie.duration_seconds",
+                        "Value": "30"
+                    }
+                ]
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "6596a502-470c-44ca-a82f-51b4b673c292"
+                }
+            }
+        },
+        "WebServerGroup": {
+            "Type": "AWS::AutoScaling::AutoScalingGroup",
+            "Properties": {
+                "VPCZoneIdentifier": {
+                    "Ref": "Subnets"
+                },
+                "LaunchConfigurationName": {
+                    "Ref": "LaunchConfig"
+                },
+                "MinSize": "1",
+                "MaxSize": "5",
+                "DesiredCapacity": {
+                    "Ref": "WebServerCapacity"
+                },
+                "TargetGroupARNs": [
+                    {
+                        "Ref": "ALBTargetGroup"
+                    }
+                ]
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "9fdba145-a8e5-41e3-9a99-e8c5e5244657"
+                }
+            }
+        },
+        "LaunchConfig": {
+            "Type": "AWS::AutoScaling::LaunchConfiguration",
+            "Properties": {
+                "ImageId": {
+                    "Ref": "InstanceAmiId"
+                },
+                "InstanceType": {
+                    "Ref": "InstanceType"
+                },
+                "SecurityGroups": [
+                    {
+                        "Ref": "WebServerSecurityGroup"
+                    }
+                ],
+                "KeyName": {
+                    "Ref": "KeyName"
+                },
+                "UserData": {
+                    "Fn::Base64": {
+                        "Fn::Join": [
+                            "",
+                            [
+                                "#!/bin/bash -xe\n",
+                                "sudo apt update -y\n",
+                                "sudo apt install apache2 -y\n"
+                            ]
+                        ]
+                    }
+                }
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "245757c6-1462-4a80-95a3-a5244075afdf"
+                }
+            }
+        },
+        "WebServerSecurityGroup": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "GroupDescription": "Enable HTTP access via port 80 locked down to the ELB and SSH access",
+                "SecurityGroupIngress": [
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 80,
+                        "ToPort": 80,
+                        "SourceSecurityGroupId": {
+                            "Ref": "ALBSecurityGroup"
+                        }
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": "22",
+                        "ToPort": "22",
+                        "CidrIp": "0.0.0.0/0"
+                    }
+                ],
+                "VpcId": {
+                    "Ref": "VpcId"
+                }
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "6cda02a5-c7e1-4d77-9465-51f5abe51f6f"
+                }
+            }
+        },
+        "DBEC2SecurityGroup": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "GroupDescription": "Habilitar puerto de acceso 3306",
+                "SecurityGroupIngress": [
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 3306,
+                        "ToPort": 3306,
+                        "SourceSecurityGroupId": {
+                            "Ref": "WebServerSecurityGroup"
+                        }
+                    }
+                ],
+                "VpcId": {
+                    "Ref": "VpcId"
+                }
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "ebc6485e-87f5-4d30-baef-97eebc62d60a"
+                }
+            }
+        },
+        "MySQLDatabase": {
+            "Type": "AWS::RDS::DBInstance",
+            "Properties": {
+                "Engine": "MySQL",
+                "DBName": {
+                    "Ref": "DBName"
+                },
+                "MasterUsername": {
+                    "Ref": "DBUser"
+                },
+                "MasterUserPassword": {
+                    "Ref": "DBPassword"
+                },
+                "DBInstanceClass": {
+                    "Ref": "DBInstanceClass"
+                },
+                "AllocatedStorage": {
+                    "Ref": "DBAllocatedStorage"
+                },
+                "VPCSecurityGroups": [
+                    {
+                        "Fn::GetAtt": [
+                            "DBEC2SecurityGroup",
+                            "GroupId"
+                        ]
+                    }
+                ]
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "c8919caa-e7d6-49d0-ab62-5160dc4d8a83"
+                }
+            }
+        }
+    },
+    "Outputs": {
+        "WebsiteURL": {
+            "Description": "URL for newly created LAMP stack",
+            "Value": {
+                "Fn::Join": [
+                    "",
+                    [
+                        "http://",
+                        {
+                            "Fn::GetAtt": [
+                                "ApplicationLoadBalancer",
+                                "DNSName"
+                            ]
+                        }
+                    ]
+                ]
+            }
+        }
+    },
+    "Metadata": {
+        "AWS::CloudFormation::Designer": {
+            "6596a502-470c-44ca-a82f-51b4b673c292": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 320,
+                    "y": 90
+                },
+                "z": 1,
+                "embeds": []
+            },
+            "791d14e9-f69f-44f4-9c25-93a84968b709": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 240,
+                    "y": 210
+                },
+                "z": 1,
+                "embeds": []
+            },
+            "6cda02a5-c7e1-4d77-9465-51f5abe51f6f": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 300,
+                    "y": 340
+                },
+                "z": 1,
+                "embeds": []
+            },
+            "ebc6485e-87f5-4d30-baef-97eebc62d60a": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 180,
+                    "y": 340
+                },
+                "z": 1,
+                "embeds": []
+            },
+            "c8919caa-e7d6-49d0-ab62-5160dc4d8a83": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 50,
+                    "y": 340
+                },
+                "z": 1,
+                "embeds": [],
+                "isassociatedwith": [
+                    "ebc6485e-87f5-4d30-baef-97eebc62d60a"
+                ],
+                "iscontainedinside": [
+                    "fef8c4c3-8e61-4170-ae4d-d5e788abd633",
+                    "fef8c4c3-8e61-4170-ae4d-d5e788abd633",
+                    "fef8c4c3-8e61-4170-ae4d-d5e788abd633"
+                ]
+            },
+            "245757c6-1462-4a80-95a3-a5244075afdf": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 470,
+                    "y": 140
+                },
+                "z": 1,
+                "embeds": [],
+                "isassociatedwith": [
+                    "e06ae7af-c2d6-4218-9d1c-db432a4ae8cb",
+                    "6596a502-470c-44ca-a82f-51b4b673c292"
+                ]
+            },
+            "d42147cd-8715-4fa4-b139-f95714aa679f": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 470,
+                    "y": 210
+                },
+                "z": 1,
+                "embeds": [],
+                "isassociatedwith": [
+                    "791d14e9-f69f-44f4-9c25-93a84968b709"
+                ]
+            },
+            "d48a81a7-bead-4beb-9d02-9ee3d859583c": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 420,
+                    "y": 340
+                },
+                "z": 1,
+                "embeds": []
+            },
+            "9fdba145-a8e5-41e3-9a99-e8c5e5244657": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 190,
+                    "y": 110
+                },
+                "z": 1,
+                "embeds": [],
+                "isassociatedwith": [
+                    "6596a502-470c-44ca-a82f-51b4b673c292",
+                    "245757c6-1462-4a80-95a3-a5244075afdf"
+                ]
+            }
+        }
+    }
+}
