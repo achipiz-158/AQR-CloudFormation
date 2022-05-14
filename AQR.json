@@ -1,6 +1,6 @@
 {
     "AWSTemplateFormatVersion": "2010-09-09",
-    "Description": "PROPUESTA DE UNA ARQUITECTURA EN CAPAS EN LA NUBE BASADA EN SOFTWARE LIBRE, UN ESTUDIO DE CASO",
+    "Description": "ARQUITECTURA EN CAPAS EN LA NUBE BASADA EN SOFTWARE LIBRE",
     "Parameters": {
         "VpcId": {
             "Type": "AWS::EC2::VPC::Id",
